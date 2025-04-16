@@ -1,0 +1,268 @@
+openapi: 3.0.0
+info:
+  title: Keycloak OIDC & OAuth2 API
+  version: 1.0.0
+tags:
+  - name: OIDC
+    description: Endpoints spécifiques à OpenID Connect
+  - name: OAuth2
+    description: Endpoints spécifiques à OAuth2
+  - name: OIDC & OAuth2
+    description: Endpoints communs à OpenID Connect et OAuth2
+paths:
+
+  # Authorization Endpoint
+  /auth/realms/{realm}/protocol/openid-connect/auth:
+    get:
+      tags:
+        - OIDC & OAuth2
+      summary: Authorization Endpoint
+      description: |
+        Ce endpoint est utilisé pour initier une demande d'autorisation.
+        
+        **Diagramme de Séquence**:
+        ```
+        User -> Client: Demande d'accès à une ressource
+        Client -> Authorization Server: Redirection avec "response_type", "client_id", "redirect_uri", etc.
+        Authorization Server -> User: Page de connexion
+        User -> Authorization Server: Authentification et consentement
+        Authorization Server -> Client: Redirection avec "code" ou "token"
+        ```
+      parameters:
+        - name: response_type
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: client_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: redirect_uri
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: scope
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirection vers la page de connexion
+
+  # Token Endpoint
+  /auth/realms/{realm}/protocol/openid-connect/token:
+    post:
+      tags:
+        - OIDC & OAuth2
+      summary: Token Endpoint
+      description: |
+        Ce endpoint est utilisé pour échanger un code d'autorisation contre un jeton d'accès (et éventuellement un jeton d'ID dans le cas d'OIDC).
+        
+        **Diagramme de Séquence**:
+        ```
+        Client -> Token Endpoint: Envoi du "grant_type", "code", "redirect_uri", "client_id", etc.
+        Token Endpoint -> Client: Réponse contenant "access_token", "id_token" (OIDC), "refresh_token", etc.
+        ```
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                grant_type:
+                  type: string
+                code:
+                  type: string
+                redirect_uri:
+                  type: string
+                client_id:
+                  type: string
+      responses:
+        '200':
+          description: Réponse contenant le jeton d'accès et éventuellement le jeton d'ID
+
+  # UserInfo Endpoint
+  /auth/realms/{realm}/protocol/openid-connect/userinfo:
+    get:
+      tags:
+        - OIDC
+      summary: UserInfo Endpoint
+      description: |
+        Ce endpoint permet au client de récupérer des informations sur l'utilisateur authentifié en utilisant un jeton d'accès.
+        
+        **Diagramme de Séquence**:
+        ```
+        Client -> UserInfo Endpoint: Envoi du "access_token"
+        UserInfo Endpoint -> Client: Réponse contenant les claims de l'utilisateur (e.g., nom, email)
+        ```
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Réponse contenant les informations de l'utilisateur
+
+  # End Session Endpoint
+  /auth/realms/{realm}/protocol/openid-connect/logout:
+    post:
+      tags:
+        - OIDC
+      summary: End Session Endpoint
+      description: |
+        Ce endpoint est utilisé pour déconnecter l'utilisateur et invalider sa session.
+        
+        **Diagramme de Séquence**:
+        ```
+        Client -> End Session Endpoint: Redirection avec "id_token_hint" et "post_logout_redirect_uri"
+        End Session Endpoint -> User: Confirmation de déconnexion
+        End Session Endpoint -> Client: Redirection vers "post_logout_redirect_uri"
+        ```
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                id_token_hint:
+                  type: string
+                post_logout_redirect_uri:
+                  type: string
+      responses:
+        '302':
+          description: Redirection vers l'URI de déconnexion
+
+  # Introspection Endpoint
+  /auth/realms/{realm}/protocol/openid-connect/token/introspect:
+    post:
+      tags:
+        - OAuth2
+      summary: Introspection Endpoint
+      description: |
+        Ce endpoint permet de vérifier la validité d'un jeton (par exemple, un jeton d'accès ou un jeton de rafraîchissement).
+        
+        **Diagramme de Séquence**:
+        ```
+        Resource Server -> Introspection Endpoint: Envoi du "token" à vérifier
+        Introspection Endpoint -> Resource Server: Réponse avec la validité du token ("active": true/false)
+        ```
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+      responses:
+        '200':
+          description: Réponse indiquant si le jeton est valide
+
+  # Revocation Endpoint
+  /auth/realms/{realm}/protocol/openid-connect/revoke:
+    post:
+      tags:
+        - OAuth2
+      summary: Revocation Endpoint
+      description: |
+        Ce endpoint permet de révoquer un jeton (par exemple, un jeton d'accès ou un jeton de rafraîchissement).
+        
+        **Diagramme de Séquence**:
+        ```
+        Client -> Revocation Endpoint: Envoi du "token" à révoquer
+        Revocation Endpoint -> Client: Réponse confirmant la révocation
+        ```
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+      responses:
+        '200':
+          description: Réponse confirmant la révocation
+
+  # JWKS Endpoint
+  /auth/realms/{realm}/protocol/openid-connect/certs:
+    get:
+      tags:
+        - OIDC
+      summary: JWKS Endpoint
+      description: |
+        Ce endpoint expose les clés publiques JSON Web Key Set (JWKS) utilisées pour valider les signatures des jetons JWT (comme les jetons d'ID).
+        
+        **Diagramme de Séquence**:
+        ```
+        Client -> JWKS Endpoint: Requête pour récupérer les clés publiques
+        JWKS Endpoint -> Client: Réponse contenant les clés publiques
+        ```
+      responses:
+        '200':
+          description: Réponse contenant les clés publiques
+
+  # Device Authorization Endpoint
+  /auth/realms/{realm}/protocol/openid-connect/auth/device:
+    post:
+      tags:
+        - OAuth2
+      summary: Device Authorization Endpoint
+      description: |
+        Ce endpoint est utilisé dans le cadre du flux d'autorisation pour appareils. Il permet à un appareil de demander un code d'autorisation que l'utilisateur peut utiliser pour se connecter sur un autre appareil.
+        
+        **Diagramme de Séquence**:
+        ```
+        Device -> Device Authorization Endpoint: Demande d'autorisation avec "client_id"
+        Device Authorization Endpoint -> Device: Réponse avec "device_code", "user_code", "verification_uri"
+        User -> Verification URI: Saisie du "user_code"
+        ```
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                client_id:
+                  type: string
+      responses:
+        '200':
+          description: Réponse contenant les codes pour l'utilisateur
+
+  # Registration Endpoint
+  /auth/realms/{realm}/clients-registrations/openid-connect:
+    post:
+      tags:
+        - OIDC
+      summary: Registration Endpoint
+      description: |
+        Ce endpoint permet aux clients de s'enregistrer dynamiquement auprès du serveur d'autorisation.
+        
+        **Diagramme de Séquence**:
+        ```
+        Client -> Registration Endpoint: Envoi des informations du client (e.g., "redirect_uris", "client_name")
+        Registration Endpoint -> Client: Réponse contenant les identifiants du client (e.g., "client_id", "client_secret")
+        ```
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                redirect_uris:
+                  type: array
+                  items:
+                    type: string
+                client_name:
+                  type: string
+      responses:
+        '201':
+          description: Réponse contenant les identifiants du client

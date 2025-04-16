@@ -1,0 +1,563 @@
+openapi: 3.0.0
+info:
+  title: Keycloak OAuth2 et OpenID Connect API
+  description: |
+    Documentation complète des endpoints OAuth2 et OpenID Connect de Keycloak.
+    Chaque endpoint est catégorisé avec des tags indiquant s'il appartient à:
+    - OAuth2 uniquement
+    - OpenID Connect uniquement
+    - Les deux protocoles (OAuth2 et OpenID Connect)
+  version: 1.0.0
+servers:
+  - url: https://keycloak-server/auth/realms/{realm}
+    variables:
+      realm:
+        default: master
+        description: Le realm Keycloak
+
+tags:
+  - name: OAuth2
+    description: Endpoints spécifiques au protocole OAuth2
+  - name: OpenID Connect
+    description: Endpoints spécifiques au protocole OpenID Connect
+  - name: OAuth2 et OpenID Connect
+    description: Endpoints communs aux deux protocoles
+
+paths:
+  /.well-known/openid-configuration:
+    get:
+      summary: Endpoint de découverte OpenID Connect
+      description: Fournit les informations de configuration et les URLs de tous les endpoints disponibles
+      operationId: discovery
+      tags:
+        - OpenID Connect
+      responses:
+        '200':
+          description: Configuration OpenID Connect
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  issuer:
+                    type: string
+                  authorization_endpoint:
+                    type: string
+                  token_endpoint:
+                    type: string
+                  userinfo_endpoint:
+                    type: string
+                  end_session_endpoint:
+                    type: string
+                  jwks_uri:
+                    type: string
+                  grant_types_supported:
+                    type: array
+                    items:
+                      type: string
+                  response_types_supported:
+                    type: array
+                    items:
+                      type: string
+
+  /protocol/openid-connect/auth:
+    get:
+      summary: Endpoint d'autorisation
+      description: Point de départ pour le flow Authorization Code, Implicit ou Hybrid
+      operationId: authorize
+      tags:
+        - OAuth2 et OpenID Connect
+      parameters:
+        - name: client_id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Identifiant du client
+        - name: redirect_uri
+          in: query
+          required: true
+          schema:
+            type: string
+          description: URI de redirection après autorisation
+        - name: response_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [code, token, id_token, code token, code id_token, token id_token, code token id_token]
+          description: Type de réponse demandé
+        - name: scope
+          in: query
+          schema:
+            type: string
+          description: Scopes demandés (ex. openid profile email)
+        - name: state
+          in: query
+          schema:
+            type: string
+          description: Valeur d'état à inclure dans la réponse
+        - name: response_mode
+          in: query
+          schema:
+            type: string
+            enum: [query, fragment, form_post]
+          description: Mode de réponse
+        - name: nonce
+          in: query
+          schema:
+            type: string
+          description: Valeur unique pour prévenir les attaques de rejeu (OpenID Connect)
+        - name: prompt
+          in: query
+          schema:
+            type: string
+            enum: [none, login, consent, select_account]
+          description: Spécifie si une interaction utilisateur est requise
+        - name: code_challenge
+          in: query
+          schema:
+            type: string
+          description: Challenge PKCE
+        - name: code_challenge_method
+          in: query
+          schema:
+            type: string
+            enum: [S256, plain]
+          description: Méthode de challenge PKCE
+      responses:
+        '302':
+          description: Redirection vers redirect_uri avec code ou tokens
+
+  /protocol/openid-connect/token:
+    post:
+      summary: Endpoint de token
+      description: Échange un code d'autorisation contre des tokens ou rafraîchit un token existant
+      operationId: token
+      tags:
+        - OAuth2 et OpenID Connect
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                grant_type:
+                  type: string
+                  enum: [authorization_code, refresh_token, password, client_credentials]
+                  description: Type de grant
+                client_id:
+                  type: string
+                  description: Identifiant du client
+                client_secret:
+                  type: string
+                  description: Secret du client (pour clients confidentiels)
+                redirect_uri:
+                  type: string
+                  description: URI de redirection (pour grant_type=authorization_code)
+                code:
+                  type: string
+                  description: Code d'autorisation (pour grant_type=authorization_code)
+                refresh_token:
+                  type: string
+                  description: Token de rafraîchissement (pour grant_type=refresh_token)
+                username:
+                  type: string
+                  description: Nom d'utilisateur (pour grant_type=password)
+                password:
+                  type: string
+                  description: Mot de passe (pour grant_type=password)
+                scope:
+                  type: string
+                  description: Scopes demandés
+                code_verifier:
+                  type: string
+                  description: Vérificateur PKCE (pour grant_type=authorization_code avec PKCE)
+              required:
+                - grant_type
+                - client_id
+      responses:
+        '200':
+          description: Réponse de token réussie
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    description: Token d'accès JWT
+                  expires_in:
+                    type: integer
+                    description: Durée de validité en secondes
+                  refresh_expires_in:
+                    type: integer
+                    description: Durée de validité du refresh token en secondes
+                  refresh_token:
+                    type: string
+                    description: Token de rafraîchissement
+                  token_type:
+                    type: string
+                    example: Bearer
+                    description: Type de token (Bearer)
+                  id_token:
+                    type: string
+                    description: Token d'identité (ID Token) si scope openid demandé (OpenID Connect uniquement)
+                  session_state:
+                    type: string
+                    description: État de la session
+                  scope:
+                    type: string
+                    description: Scopes accordés
+        '400':
+          description: Requête invalide
+        '401':
+          description: Authentification échouée
+
+  /protocol/openid-connect/userinfo:
+    get:
+      summary: Endpoint UserInfo
+      description: Récupère les informations de l'utilisateur associé au token d'accès
+      operationId: userinfo
+      tags:
+        - OpenID Connect
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Informations utilisateur
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sub:
+                    type: string
+                    description: Identifiant unique de l'utilisateur
+                  name:
+                    type: string
+                    description: Nom complet
+                  given_name:
+                    type: string
+                    description: Prénom
+                  family_name:
+                    type: string
+                    description: Nom de famille
+                  email:
+                    type: string
+                    description: Adresse e-mail
+                  email_verified:
+                    type: boolean
+                    description: Vérification de l'e-mail
+                  preferred_username:
+                    type: string
+                    description: Nom d'utilisateur préféré
+        '401':
+          description: Token invalide ou expiré
+
+  /protocol/openid-connect/logout:
+    get:
+      summary: Endpoint de déconnexion (Front-Channel)
+      description: Déconnecte l'utilisateur via le navigateur
+      operationId: frontChannelLogout
+      tags:
+        - OAuth2 et OpenID Connect
+      parameters:
+        - name: id_token_hint
+          in: query
+          schema:
+            type: string
+          description: ID token précédemment émis (OpenID Connect)
+        - name: post_logout_redirect_uri
+          in: query
+          schema:
+            type: string
+          description: URI de redirection après déconnexion
+        - name: state
+          in: query
+          schema:
+            type: string
+          description: Valeur d'état à inclure dans la redirection
+      responses:
+        '302':
+          description: Redirection après déconnexion
+    post:
+      summary: Endpoint de déconnexion (Back-Channel)
+      description: Révoque les tokens et la session de l'utilisateur
+      operationId: backChannelLogout
+      tags:
+        - OAuth2 et OpenID Connect
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                refresh_token:
+                  type: string
+                  description: Token de rafraîchissement à révoquer
+                client_id:
+                  type: string
+                  description: ID du client
+                client_secret:
+                  type: string
+                  description: Secret du client (pour clients confidentiels)
+      responses:
+        '204':
+          description: Déconnexion réussie
+        '400':
+          description: Requête invalide
+        '401':
+          description: Authentification échouée
+
+  /protocol/openid-connect/revoke:
+    post:
+      summary: Endpoint de révocation de token
+      description: Révoque un token d'accès ou de rafraîchissement
+      operationId: revoke
+      tags:
+        - OAuth2
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+                  description: Token à révoquer
+                token_type_hint:
+                  type: string
+                  enum: [access_token, refresh_token]
+                  description: Type de token
+                client_id:
+                  type: string
+                  description: ID du client
+                client_secret:
+                  type: string
+                  description: Secret du client (pour clients confidentiels)
+              required:
+                - token
+                - client_id
+      responses:
+        '200':
+          description: Révocation réussie
+        '400':
+          description: Requête invalide
+        '401':
+          description: Authentification échouée
+
+  /protocol/openid-connect/certs:
+    get:
+      summary: Endpoint JWKS
+      description: Fournit les clés publiques pour vérifier les signatures des tokens
+      operationId: certs
+      tags:
+        - OAuth2 et OpenID Connect
+      responses:
+        '200':
+          description: Clés publiques au format JWKS
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        kid:
+                          type: string
+                          description: ID de la clé
+                        kty:
+                          type: string
+                          description: Type de clé (généralement RSA)
+                        alg:
+                          type: string
+                          description: Algorithme utilisé (RS256, etc.)
+                        use:
+                          type: string
+                          description: Utilisation de la clé (sig pour signature)
+                        n:
+                          type: string
+                          description: Modulus (pour RSA)
+                        e:
+                          type: string
+                          description: Exposant (pour RSA)
+  
+  /protocol/openid-connect/token/introspect:
+    post:
+      summary: Endpoint d'introspection de token
+      description: Vérifie la validité d'un token et retourne ses informations
+      operationId: introspect
+      tags:
+        - OAuth2 et OpenID Connect
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+                  description: Token à inspecter
+                token_type_hint:
+                  type: string
+                  enum: [access_token, refresh_token]
+                  description: Type de token
+                client_id:
+                  type: string
+                  description: ID du client
+                client_secret:
+                  type: string
+                  description: Secret du client (pour clients confidentiels)
+              required:
+                - token
+                - client_id
+      responses:
+        '200':
+          description: Informations du token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  active:
+                    type: boolean
+                    description: Indique si le token est actif
+                  exp:
+                    type: integer
+                    description: Timestamp d'expiration
+                  iat:
+                    type: integer
+                    description: Timestamp d'émission
+                  jti:
+                    type: string
+                    description: ID unique du token
+                  iss:
+                    type: string
+                    description: Émetteur du token
+                  aud:
+                    type: string
+                    description: Audience du token
+                  sub:
+                    type: string
+                    description: Sujet du token (ID utilisateur)
+                  typ:
+                    type: string
+                    description: Type de token
+                  scope:
+                    type: string
+                    description: Scopes accordés
+        '400':
+          description: Requête invalide
+        '401':
+          description: Authentification échouée
+
+  /protocol/openid-connect/3p-cookies/step1:
+    get:
+      summary: 3P Cookies - Étape 1
+      description: Première étape du processus de gestion des cookies tiers
+      operationId: cookies3pStep1
+      tags:
+        - OpenID Connect
+      responses:
+        '200':
+          description: Étape 1 réussie
+
+  /protocol/openid-connect/3p-cookies/step2:
+    get:
+      summary: 3P Cookies - Étape 2
+      description: Deuxième étape du processus de gestion des cookies tiers
+      operationId: cookies3pStep2
+      tags:
+        - OpenID Connect
+      responses:
+        '200':
+          description: Étape 2 réussie
+
+  /protocol/openid-connect/login-status-iframe.html:
+    get:
+      summary: Iframe de statut de connexion
+      description: Page HTML pour vérifier le statut de la session
+      operationId: loginStatusIframe
+      tags:
+        - OpenID Connect
+      responses:
+        '200':
+          description: Page HTML de l'iframe
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /clients-registrations/openid-connect:
+    post:
+      summary: Enregistrement dynamique de client
+      description: Permet d'enregistrer dynamiquement un nouveau client OpenID Connect
+      operationId: registerClient
+      tags:
+        - OpenID Connect
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                redirect_uris:
+                  type: array
+                  items:
+                    type: string
+                  description: URIs de redirection autorisées
+                client_name:
+                  type: string
+                  description: Nom du client
+                scope:
+                  type: string
+                  description: Scopes demandés par défaut
+                grant_types:
+                  type: array
+                  items:
+                    type: string
+                  description: Types de grant supportés
+                response_types:
+                  type: array
+                  items:
+                    type: string
+                  description: Types de réponse supportés
+              required:
+                - redirect_uris
+      responses:
+        '201':
+          description: Client enregistré avec succès
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  client_id:
+                    type: string
+                    description: ID du client généré
+                  client_secret:
+                    type: string
+                    description: Secret du client généré
+                  registration_access_token:
+                    type: string
+                    description: Token d'accès pour la gestion du client
+        '400':
+          description: Requête invalide
+        '401':
+          description: Authentification échouée
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
